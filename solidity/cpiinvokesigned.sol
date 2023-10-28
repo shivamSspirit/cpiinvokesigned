@@ -200,7 +200,7 @@ contract pda_mint_authority {
 
    // get some money for your nft from buyer in sol(lamports) tokens
 
-     // Transfer tokens from one token account to another via Cross Program Invocation to Token Program
+     // Transfer tokens from buyer token account to seller via Cross Program Invocation to Token Program
     function transferTokens(
         address from, // token account to transfer from
         address to, // token account to transfer to
@@ -209,9 +209,6 @@ contract pda_mint_authority {
         SplToken.TokenAccountData from_data = SplToken.get_token_account_data(from);
         SplToken.transfer(from, to, from_data.owner, amount);
     }
-
-// creating a buyer token account 
-
 
 
 //  sell nft to buyer
@@ -223,7 +220,7 @@ contract pda_mint_authority {
             mint,
             dest
         );
-        // Transfer tokens to the buyer token account
+        // Transfer token to the buyer token account
         _transfer(
             src,
             dest,
