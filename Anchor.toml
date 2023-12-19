@@ -2,18 +2,21 @@
 seeds = false
 skip-lint = false
 
-[programs.localnet]
-cpiinvokesigned = "F1ipperKF9EfD821ZbbYjS319LXYiBmjhzkkf5a26rC"
+[programs.devnet]
+cpi_invoke_signed = "51zRdiWLkjnMNxYg4oho3PuqFfTv4ct4mvL7ptUH13ca"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "Devnet"
 wallet = "/Users/shivamsoni/.config/solana/id.json"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+pda-mint = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/pda-mint.ts"
+nft-sell = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/nft-sell.ts"
 
 [[test.validator.clone]]
 address = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+
+

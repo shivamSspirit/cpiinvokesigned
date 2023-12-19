@@ -1,25 +1,30 @@
-// import "../libraries/spl_token.sol";
-// import {SplToken} from "../libraries/spl_token.sol";
 import "../libraries/spl_token.sol";
 import "solana";
 
-@program_id("J2eUKE878XKXJZaP7vXwxgWnWnNQMqHSkMPoRFQwa86b")
-contract pda_mint_authority {
-    bytes1 bump; // stores the bump for the + address
+@program_id("51zRdiWLkjnMNxYg4oho3PuqFfTv4ct4mvL7ptUH13ca")
+contract cpi_invoke_signed {
+    bytes1 bump; // stores the bump for the pda address
 
     @payer(payer)
-    @seed("mint_authority") // hard-coded seed
+    @seed("check_auth") // hard-coded seed
     constructor(
-        @bump bytes1 _bump  // bump for the pda address
+        @bump bytes1 _bump, uint64 fundLamports  // bump for the pda address
     ) {
         // Independently derive the PDA address from the seeds, bump, and programId
-        (address pda, bytes1 pdaBump) = try_find_program_address(["mint_authority"], type(pda_mint_authority).program_id);
+        (address pda, bytes1 pdaBump) = try_find_program_address(["check_auth"], type(cpi_invoke_signed).program_id);
 
         // Verify that the bump passed to the constructor matches the bump derived from the seeds and programId
         // This ensures that only the canonical pda address can be used to create the account (first bump that generates a valid pda address)
         require(pdaBump == _bump, 'INVALID_BUMP');
 
         bump = _bump;
+
+         // Fund the pda account with additional lamports
+        SystemInstruction.transfer(
+            tx.accounts.payer.key, // from
+            address(this), // to (the address of the account being created)
+            fundLamports // amount of lamports to transfer
+        );
     }
 
 
@@ -76,7 +81,7 @@ contract pda_mint_authority {
         address metaplexId
     ) private {
         // // Independently derive the PDA address from the seeds, bump, and programId
-        (address pda, bytes1 _bump) = try_find_program_address(["mint_authority"], type(pda_mint_authority).program_id);
+        (address pda, bytes1 _bump) = try_find_program_address(["check_auth"], type(cpi_invoke_signed).program_id);
 
         require(mintAuthority == pda, 'INVALID_PDA');
 
@@ -109,7 +114,7 @@ contract pda_mint_authority {
         bytes1 discriminator = 33;
         bytes instructionData = abi.encode(discriminator, args);
 
-        metaplexId.call{accounts: metas, seeds: [["mint_authority", abi.encode(_bump)]]}(instructionData);
+        metaplexId.call{accounts: metas, seeds: [["check_auth", abi.encode(_bump)]]}(instructionData);
     }
 
     struct CreateMetadataAccountArgsV3 {
@@ -160,7 +165,7 @@ contract pda_mint_authority {
     // Invoke the token program to mint tokens to a token account, using a PDA as the mint authority
     function _mintTo(address mint, address account, uint64 amount, address pdaAccount) private {
         // Independently derive the PDA address from the seeds, bump, and programId
-        (address pda, bytes1 _bump) = try_find_program_address(["mint_authority"], type(pda_mint_authority).program_id);
+        (address pda, bytes1 _bump) = try_find_program_address(["check_auth"], type(cpi_invoke_signed).program_id);
         require(pdaAccount == pda, 'INVALID_PDA');
 
         // Prepare instruction data
@@ -176,12 +181,12 @@ contract pda_mint_authority {
         ];
 
         // Invoke the token program with prepared accounts and instruction data
-        SplToken.tokenProgramId.call{accounts: metas, seeds: [["mint_authority", abi.encode(_bump)]]}(instructionData);
+        SplToken.tokenProgramId.call{accounts: metas, seeds: [["check_auth", abi.encode(_bump)]]}(instructionData);
     }
 
     function _removeMintAuthority(address mintAccount, address pdaAccount) private {
         // Independently derive the PDA address from the seeds, bump, and programId
-        (address pda, bytes1 _bump) = try_find_program_address(["mint_authority"], type(pda_mint_authority).program_id);
+        (address pda, bytes1 _bump) = try_find_program_address(["check_auth"], type(cpi_invoke_signed).program_id);
         require(pdaAccount == pda, 'INVALID_PDA');
 
 		AccountMeta[2] metas = [
@@ -195,53 +200,48 @@ contract pda_mint_authority {
 		instructionData[3] = 0;
 
         // Invoke the token program with prepared accounts and instruction data
-        SplToken.tokenProgramId.call{accounts: metas, seeds: [["mint_authority", abi.encode(_bump)]]}(instructionData);
+        SplToken.tokenProgramId.call{accounts: metas, seeds: [["check_auth", abi.encode(_bump)]]}(instructionData);
 	}
 
-   // get some money for your nft from buyer in sol(lamports) tokens
+    // now selling part
 
-     // Transfer tokens from buyer token account to seller via Cross Program Invocation to Token Program
-    function transferTokens(
-        address from, // token account to transfer from
-        address to, // token account to transfer to
-        uint64 amount // amount to transfer
-    ) public {
-        SplToken.TokenAccountData from_data = SplToken.get_token_account_data(from);
-        SplToken.transfer(from, to, from_data.owner, amount);
-    }
+    @mutableAccount(payer)
+    @mutableSigner(buyer)
+    @mutableAccount(sellerTokenAccount)
+    @mutableAccount(buyerTokenAccount)
+    @mutableAccount(mint)
+    @mutableSigner(owner)
+   
+    function sell(uint64 sale_lamports, uint64 token_amount) external {
+      //  buyer will send lamports firstl
+        SystemInstruction.transfer(
+            tx.accounts.buyer.key, // from
+            tx.accounts.owner.key, // to (the address of the account being created)
+            sale_lamports // amount of lamports to transfer
+        );
 
 
-//  sell nft to buyer
-    function transferToken(address payer, address src, address dest, address mint, uint64 amount) public {
-        // Create an associated token account for the destination to receive the transferred token
+      //  seller receive the lamports
+      //  now creating buyer token account
+      // Create an associated token account for the buyer to receive the nft
+
+
+
         SplToken.create_associated_token_account(
-            payer,
-            dest,
-            mint,
-            dest
+            tx.accounts.buyer.key, // payer account
+            tx.accounts.buyerTokenAccount.key, // associated token account address
+            tx.accounts.mint.key, // mint account
+            tx.accounts.owner.key // owner account
         );
-        // Transfer token to the buyer token account
-        _transfer(
-            src,
-            dest,
-            amount
+
+
+// transfer nft to buyer token account
+        SplToken.transfer(
+         tx.accounts.sellerTokenAccount.key,
+         tx.accounts.buyerTokenAccount.key,
+         tx.accounts.owner.key,
+         token_amount
         );
-    }
-
-    function _transfer(address src, address dest, uint64 amount) private {
-        (address pda, bytes1 _bump) = try_find_program_address(["mint_authority"], type(pda_mint_transfer_authority).program_id);
-        require(address(this) == pda, 'INVALID_PDA');
-
-        bytes instructionData = new bytes(9);
-        instructionData[0] = uint8(3); // Transfer instruction index
-        instructionData.writeUint64LE(amount, 1); // Amount to transfer
-
-        AccountMeta[3] metas = [
-            AccountMeta({pubkey: src, is_writable: true, is_signer: false}),
-            AccountMeta({pubkey: dest, is_writable: true, is_signer: false}),
-            AccountMeta({pubkey: pda, is_writable: false, is_signer: true}) // transfer authority
-        ];
-
-        SplToken.tokenProgramId.call{accounts: metas, seeds: [["mint_authority", abi.encode(_bump)]]}(instructionData);
+// nft transfer succesfully
     }
 }
